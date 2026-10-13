@@ -1,0 +1,220 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow: hidden;
+    height: 100%;
+  }
+
+  body {
+    height: 100%;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Prevent pull-to-refresh on mobile */
+  body {
+    overscroll-behavior: none;
+  }
+
+  /* Hide scrollbars but keep scroll functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Thin scrollbar for content areas */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #4E3636 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgba(78, 54, 54, 0.3);
+    border-radius: 999px;
+  }
+}
+
+@layer components {
+  /* Primary action button */
+  .btn-primary {
+    @apply bg-teal text-white font-semibold rounded-btn px-5 py-3 min-h-tap min-w-tap
+           shadow-soft transition-all duration-200 ease-out
+           hover:bg-teal-dark hover:shadow-medium
+           active:scale-[0.97] active:shadow-inner
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2;
+  }
+
+  /* Crimson action button (for bill total / finalize) */
+  .btn-crimson {
+    @apply bg-crimson text-white font-bold rounded-btn px-5 py-3 min-h-tap min-w-tap
+           shadow-soft transition-all duration-200 ease-out
+           hover:bg-crimson-dark hover:shadow-medium
+           active:scale-[0.97] active:shadow-inner
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson focus-visible:ring-offset-2;
+  }
+
+  /* Ghost/outline button */
+  .btn-ghost {
+    @apply bg-transparent text-teal font-medium rounded-btn px-4 py-2.5 min-h-tap min-w-tap
+           border border-teal/20
+           transition-all duration-200 ease-out
+           hover:bg-teal/5 hover:border-teal/40
+           active:scale-[0.97]
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2;
+  }
+
+  /* Card container */
+  .card {
+    @apply bg-cream-card rounded-card shadow-soft;
+  }
+
+  /* Item grid button */
+  .item-btn {
+    @apply card flex flex-col items-start justify-between p-3 min-h-[80px] w-full
+           cursor-pointer select-none
+           transition-all duration-150 ease-out
+           hover:shadow-medium hover:-translate-y-0.5
+           active:scale-[0.96] active:shadow-inner;
+  }
+
+  /* Category tab */
+  .category-tab {
+    @apply px-4 py-2.5 rounded-btn font-medium text-sm whitespace-nowrap min-h-tap
+           transition-all duration-200 ease-out cursor-pointer select-none;
+  }
+  .category-tab-active {
+    @apply bg-teal text-white shadow-soft;
+  }
+  .category-tab-inactive {
+    @apply bg-cream-card text-brown hover:bg-cream-dark;
+  }
+
+  /* Numpad key */
+  .numpad-key {
+    @apply flex items-center justify-center rounded-btn font-sans font-semibold text-xl
+           min-h-[56px] min-w-tap
+           transition-all duration-100 ease-out cursor-pointer select-none
+           active:scale-[0.94];
+  }
+
+  /* Sidebar nav item */
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-btn min-h-tap
+           transition-all duration-200 ease-out cursor-pointer select-none;
+  }
+  .sidebar-item-active {
+    @apply bg-white/[0.15] text-white;
+  }
+  .sidebar-item-inactive {
+    @apply text-white/60 hover:bg-white/[0.08] hover:text-white/80;
+  }
+
+  /* Toast notification */
+  .toast {
+    @apply fixed top-4 right-4 z-[9999] px-5 py-3 rounded-card shadow-lifted
+           font-sans text-sm font-medium
+           animate-slide-in;
+  }
+}
+
+@layer utilities {
+  /* Animations */
+  @keyframes slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes slide-out {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes pulse-gentle {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .animate-slide-in {
+    animation: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .animate-slide-out {
+    animation: slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-fade-in {
+    animation: fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .animate-pulse-gentle {
+    animation: pulse-gentle 2s ease-in-out infinite;
+  }
+}
+
+/* Print styles — A5 fallback for browser print */
+@media print {
+  body {
+    background: white !important;
+    font-size: 10pt;
+    width: 58mm;
+    margin: 0;
+    padding: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .receipt-container {
+    width: 58mm;
+    padding: 2mm;
+    font-family: 'Courier New', monospace;
+    font-size: 9pt;
+    line-height: 1.3;
+  }
+
+  .receipt-container table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .receipt-container th,
+  .receipt-container td {
+    padding: 1px 0;
+    text-align: left;
+    font-size: 8pt;
+  }
+
+  .receipt-container .text-right {
+    text-align: right;
+  }
+
+  .receipt-separator {
+    border-top: 1px dashed #000;
+    margin: 2px 0;
+  }
+}
