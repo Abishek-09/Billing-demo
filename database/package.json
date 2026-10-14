@@ -1,0 +1,34 @@
+{
+  "name": "bake-and-brew-database",
+  "version": "1.0.0",
+  "description": "Prisma ORM schema, migrations, and seed data for Bake & Brew Bakery & Tea Stall POS",
+  "type": "module",
+  "scripts": {
+    "prisma:validate": "prisma validate",
+    "prisma:format": "prisma format",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:seed": "node prisma/seed.js",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "keywords": [
+    "prisma",
+    "mysql",
+    "database",
+    "pos",
+    "bakery"
+  ],
+  "author": "Bake & Brew",
+  "license": "ISC",
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3"
+  }
+}

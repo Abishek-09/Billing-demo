@@ -1,0 +1,285 @@
+// =============================================================================
+// Bake & Brew POS — Prisma Database Schema
+// Database Engine: MySQL (Compatible with XAMPP / WAMP / phpMyAdmin)
+// Character Set: utf8mb4 (Supports Indian Rupee Symbol ₹, Tamil & regional text)
+// =============================================================================
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum Role {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+enum SellBy {
+  WEIGHT // Sold by weight (e.g. Cakes, Sweets, Biscuits priced per kg)
+  PIECE  // Sold by piece/unit (e.g. Chai, Coffee, Breads, Puffs)
+}
+
+enum BillStatus {
+  HELD   // Order parked temporarily
+  PAID   // Completed & paid transaction
+  VOIDED // Cancelled bill (excluded from net sales, audited)
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+}
+
+enum SessionStatus {
+  OPEN
+  CLOSED
+}
+
+// -----------------------------------------------------------------------------
+// 1. STAFF / USERS
+// -----------------------------------------------------------------------------
+model Staff {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  role      Role     @default(CASHIER)
+  pinHash   String   @db.VarChar(255) // Store bcrypt hash, NEVER plain text PIN
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  openedSessions DaySession[] @relation("SessionOpenedBy")
+  closedSessions DaySession[] @relation("SessionClosedBy")
+  cashierBills   Bill[]       @relation("BillCashier")
+  voidedBills    Bill[]       @relation("BillVoidedBy")
+  countedStocks  StockCount[] @relation("StockCountedBy")
+  auditLogs      AuditLog[]   @relation("StaffAuditLogs")
+
+  @@map("staff")
+}
+
+// -----------------------------------------------------------------------------
+// 2. CATEGORY
+// -----------------------------------------------------------------------------
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique @db.VarChar(100)
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+
+  // Relations
+  // ON DELETE RESTRICT: A category with existing products cannot be deleted
+  products  Product[]
+
+  @@map("categories")
+}
+
+// -----------------------------------------------------------------------------
+// 3. PRODUCT
+// NOTE: Application code must validate price > 0 and weightKg > 0 upon creation.
+// -----------------------------------------------------------------------------
+model Product {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique @db.VarChar(50) // Barcode / Item SKU code
+  name          String   @db.VarChar(150)
+  description   String?  @db.Text
+  imageUrl      String?  @db.VarChar(500)
+  categoryId    Int
+  category      Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  sellBy        SellBy   @default(PIECE)
+  unit          String   @db.VarChar(20) // 'kg', 'pc', 'pkt', 'cup', 'loaf'
+  price         Decimal  @db.Decimal(10, 2) // Price per kg (weight) or price per unit (piece)
+  gstRate       Int      @default(5) // GST slab percentage: 5%, 12%, 18%, etc.
+
+  stockQty      Decimal  @default(0.000) @db.Decimal(10, 3) // Decimal allows fractional kg (e.g. 14.500 kg)
+  lowStockLevel Decimal  @default(5.000) @db.Decimal(10, 3)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  // ON DELETE CASCADE: Deleting an unbilled product cleans up its historical stock count rows
+  stockCounts   StockCount[]
+  // ON DELETE RESTRICT: A product that has been sold in bills can NEVER be hard-deleted (set isActive = false)
+  billItems     BillItem[]
+
+  @@index([categoryId])
+  @@index([categoryId, isActive])
+  @@map("products")
+}
+
+// -----------------------------------------------------------------------------
+// 4. STOCK COUNT (Physical Audits & Variances)
+// -----------------------------------------------------------------------------
+model StockCount {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  countedQty  Decimal  @db.Decimal(10, 3)
+  systemQty   Decimal  @db.Decimal(10, 3)
+  difference  Decimal  @db.Decimal(10, 3) // countedQty - systemQty
+  countedById Int
+  countedBy   Staff    @relation("StockCountedBy", fields: [countedById], references: [id], onDelete: Restrict)
+  note        String?  @db.Text
+  countedAt   DateTime @default(now())
+
+  @@index([productId])
+  @@index([countedById])
+  @@map("stock_counts")
+}
+
+// -----------------------------------------------------------------------------
+// 5. DAY SESSION (Business Day Open / Close / Z-Report)
+// Only ONE session can have status = OPEN at any time (enforced in application logic)
+// -----------------------------------------------------------------------------
+model DaySession {
+  id             Int           @id @default(autoincrement())
+  openedAt       DateTime      @default(now())
+  closedAt       DateTime?
+  openedById     Int
+  openedBy       Staff         @relation("SessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  closedById     Int?
+  closedBy       Staff?        @relation("SessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+
+  openingCash    Decimal       @default(0.00) @db.Decimal(10, 2)
+  closingCash    Decimal?      @db.Decimal(10, 2)
+  status         SessionStatus @default(OPEN)
+
+  // Saved Z-Report Totals (Snapshotted when day is closed)
+  totalSales     Decimal       @default(0.00) @db.Decimal(10, 2)
+  totalBills     Int           @default(0)
+  itemsSold      Decimal       @default(0.000) @db.Decimal(10, 3)
+  discountsGiven Decimal       @default(0.00) @db.Decimal(10, 2)
+  cgst           Decimal       @default(0.00) @db.Decimal(10, 2)
+  sgst           Decimal       @default(0.00) @db.Decimal(10, 2)
+  voidedBills    Int           @default(0)
+
+  // Relations
+  bills          Bill[]
+
+  @@index([openedById])
+  @@index([closedById])
+  @@index([status])
+  @@map("day_sessions")
+}
+
+// -----------------------------------------------------------------------------
+// 6. BILL (Sales Invoice / Receipt)
+// -----------------------------------------------------------------------------
+model Bill {
+  id             Int         @id @default(autoincrement())
+  billNo         String      @unique @db.VarChar(50) // e.g. "BB-261014-001"
+  sessionId      Int
+  session        DaySession  @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  cashierId      Int
+  cashier        Staff       @relation("BillCashier", fields: [cashierId], references: [id], onDelete: Restrict)
+
+  status         BillStatus  @default(PAID)
+  subtotal       Decimal     @db.Decimal(10, 2)
+  discountAmount Decimal     @default(0.00) @db.Decimal(10, 2)
+  discountNote   String?     @db.VarChar(255)
+  cgst           Decimal     @default(0.00) @db.Decimal(10, 2)
+  sgst           Decimal     @default(0.00) @db.Decimal(10, 2)
+  totalAmount    Decimal     @db.Decimal(10, 2) // subtotal - discount + cgst + sgst
+
+  paymentMode    PaymentMode @default(CASH)
+  amountReceived Decimal?    @db.Decimal(10, 2)
+  changeReturned Decimal?    @db.Decimal(10, 2)
+
+  // Voiding Details
+  voidReason     String?     @db.Text
+  voidedById     Int?
+  voidedBy       Staff?      @relation("BillVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+
+  createdAt      DateTime    @default(now())
+  paidAt         DateTime?
+  updatedAt      DateTime    @updatedAt
+
+  // Relations
+  // ON DELETE CASCADE: Deleting a bill deletes all its line items
+  items          BillItem[]
+
+  // Reporting & Query Performance Indexes
+  @@index([sessionId])
+  @@index([cashierId])
+  @@index([voidedById])
+  @@index([createdAt])
+  @@index([status])
+  @@map("bills")
+}
+
+// -----------------------------------------------------------------------------
+// 7. BILL ITEM (Line Item with Immutable Snapshot)
+// Snapshots guarantee historical audit integrity even if product price/name changes later
+// -----------------------------------------------------------------------------
+model BillItem {
+  id           Int      @id @default(autoincrement())
+  billId       Int
+  bill         Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  // Immutable Historical Snapshot Fields
+  productName  String   @db.VarChar(150)
+  unit         String   @db.VarChar(20)
+  sellBy       SellBy
+  unitPrice    Decimal  @db.Decimal(10, 2)
+  gstRate      Int
+
+  // Quantity / Measurement Fields
+  qty          Int?     @default(0)                         // Whole number quantity for piece items (e.g. 2 cups)
+  weightKg     Decimal? @default(0.000) @db.Decimal(10, 3) // Precision weight for weighed items (e.g. 0.500 kg)
+
+  // Line Financials
+  lineDiscount Decimal  @default(0.00) @db.Decimal(10, 2)
+  lineTotal    Decimal  @db.Decimal(10, 2)       // Final billed price after tax & line discount
+
+  @@index([billId])
+  @@index([productId])
+  @@map("bill_items")
+}
+
+// -----------------------------------------------------------------------------
+// 8. SHOP SETTING (Single-Row Outlet Configuration)
+// -----------------------------------------------------------------------------
+model ShopSetting {
+  id            Int     @id @default(autoincrement())
+  shopName      String  @db.VarChar(150)
+  address       String  @db.Text
+  phone         String  @db.VarChar(30)
+  gstin         String  @db.VarChar(30)
+  receiptFooter String  @db.VarChar(255)
+  printerWidth  Int     @default(80) // 58 or 80 mm thermal roll width
+
+  @@map("shop_settings")
+}
+
+// -----------------------------------------------------------------------------
+// 9. AUDIT LOG (Tamper-Resistant Activity Tracking)
+// -----------------------------------------------------------------------------
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  staffId   Int
+  staff     Staff    @relation("StaffAuditLogs", fields: [staffId], references: [id], onDelete: Restrict)
+  action    String   @db.VarChar(100) // 'BILL_VOIDED', 'DAY_CLOSED', 'PRICE_CHANGED', 'PIN_CHANGED'
+  entity    String   @db.VarChar(100) // 'Bill', 'Product', 'DaySession', 'Staff'
+  entityId  String   @db.VarChar(100)
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([staffId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
